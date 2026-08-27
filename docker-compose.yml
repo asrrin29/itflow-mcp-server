@@ -1,0 +1,46 @@
+services:
+  itflow-mcp:
+    build: .
+    image: itflow-mcp-server:latest
+    container_name: itflow-mcp-server
+    restart: unless-stopped
+    ports:
+      # Published host port : container port. Change the left side to rebind.
+      - "${MCP_HTTP_PORT:-8700}:8700"
+    environment:
+      # --- ITFlow instance (required) ---
+      ITFLOW_BASE_URL: "${ITFLOW_BASE_URL:?set ITFLOW_BASE_URL in .env}"
+      ITFLOW_API_KEY: "${ITFLOW_API_KEY:?set ITFLOW_API_KEY in .env}"
+      ITFLOW_API_KEY_PASSWORD: "${ITFLOW_API_KEY_PASSWORD:-}"
+      ITFLOW_VERIFY_SSL: "${ITFLOW_VERIFY_SSL:-true}"
+      ITFLOW_TIMEOUT: "${ITFLOW_TIMEOUT:-30}"
+      ITFLOW_MAX_RETRIES: "${ITFLOW_MAX_RETRIES:-2}"
+      # --- MCP server (required for HTTP transport) ---
+      MCP_API_KEY: "${MCP_API_KEY:?set MCP_API_KEY in .env (generate: itflow-mcp-server gen-key)}"
+      MCP_HTTP_HOST: "0.0.0.0"
+      MCP_HTTP_PORT: "8700"
+      # DNS-rebinding protection: list the hostname(s) clients use, e.g.
+      # MCP_ALLOWED_HOSTS: "itflow-mcp.example.com:8700"
+      # MCP_ALLOWED_ORIGINS: "https://itflow-mcp.example.com"
+      MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:-}"
+      MCP_ALLOWED_ORIGINS: "${MCP_ALLOWED_ORIGINS:-}"
+      MCP_LOG_LEVEL: "${MCP_LOG_LEVEL:-INFO}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8700/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Hardening: no privileged access, read-only root filesystem, drop all
+    # capabilities. The server only needs outbound network access.
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
