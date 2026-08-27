@@ -262,3 +262,8 @@ tests/
   regularly (ITFlow docs recommend monthly for ITFlow keys).
 - Scope ITFlow keys to a single client where possible; the MCP server respects
   whatever scope the key has.
+
+## License
+
+Distributed under the [MIT License](LICENSE). See the `LICENSE` file for full
+terms.
