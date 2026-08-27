@@ -1,14 +1,16 @@
 # ITFlow MCP Server
 
 An [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that lets AI
-agents communicate with an [ITFlow](https://www.itflow.org/) instance — the open source PSA
-for small businesses — through its v1 REST API.
+agents communicate with an [ITFlow](https://www.itflow.org/) instance, an IT documentation,
+ticketing and accounting system for small MSPs, through its v1 REST API.
 
 Every documented ITFlow API module becomes a set of tools an agent can call:
 list clients, create tickets, manage assets and contacts, look up credentials,
 read invoices, and more.
 
 Built on the [MCP Python SDK](https://py.sdk.modelcontextprotocol.io) (v2, `MCPServer`).
+
+Tested and confirmed working with ITFlow version 26.08.2.
 
 ## Disclaimer
 
@@ -24,7 +26,7 @@ review the code before relying on it, especially for anything security-sensitive
 ## ITFlow API coverage
 
 Tools are generated from the module reference in
-[https://docs.itflow.org/api](https://docs.itflow.org/api) — one tool per
+[https://docs.itflow.org/api](https://docs.itflow.org/api), with one tool per
 `{module}/{function}.php` endpoint:
 
 | Module | Tools |
@@ -50,16 +52,16 @@ Tools are generated from the module reference in
 
 Plus two helper tools:
 
-- `itflow_status` — show the server's configuration and (with `ping: true`) run a
+- `itflow_status`: show the server's configuration and (with `ping: true`) run a
   live test call against ITFlow.
-- `itflow_list_modules` — discover all modules and their tools.
+- `itflow_list_modules`: discover all modules and their tools.
 
 Notes from the ITFlow docs that the server enforces or documents:
 
 - Reads return 50 records by default; pass `limit`/`offset` to paginate.
 - `client_id` is required on create/update/delete when the API key has
   all-client scope.
-- `api_key` is always supplied by the server from `ITFLOW_API_KEY` — it is never
+- `api_key` is always supplied by the server from `ITFLOW_API_KEY`; it is never
   a tool parameter.
 - `credentials_*` tools automatically send `api_key_decrypt_password` from
   `ITFLOW_API_KEY_PASSWORD` (ITFlow requires it for all credential operations).
@@ -108,7 +110,7 @@ itflow-mcp-server check
 
 ### 4. Run
 
-**stdio** (for local MCP clients — the default):
+**stdio** (the default, for local MCP clients):
 
 ```bash
 itflow-mcp-server
@@ -135,7 +137,7 @@ itflow-mcp-server serve-http
 | `MCP_HTTP_PORT` | no | Bind port for `serve-http` (default `8700`). |
 | `MCP_ALLOWED_HOSTS` | no | Comma-separated `Host` allowlist for the HTTP transport (see note below). |
 | `MCP_ALLOWED_ORIGINS` | no | Comma-separated browser `Origin` allowlist for the HTTP transport. |
-| `ITFLOW_VERIFY_SSL` | no | `true` (default) or `false` — set `false` only for self-signed local test instances. |
+| `ITFLOW_VERIFY_SSL` | no | `true` (default) or `false`. Set `false` only for self-signed local test instances. |
 | `ITFLOW_TIMEOUT` | no | HTTP timeout in seconds (default `30`). |
 | `ITFLOW_MAX_RETRIES` | no | Extra retries on transient failures, 429/5xx (default `2`). |
 | `MCP_LOG_LEVEL` | no | `DEBUG`, `INFO`, `WARNING`, `ERROR` (default `INFO`). Logs go to stderr. |
@@ -216,7 +218,7 @@ docker run --rm -d --name itflow-mcp -p 8700:8700 --env-file .env \
 
 **Serving behind a real hostname:** DNS-rebinding protection auto-enables for
 loopback binds. For a public hostname, set `MCP_ALLOWED_HOSTS` (and
-`MCP_ALLOWED_ORIGINS` for browser clients) in `.env` — see the variable table
+`MCP_ALLOWED_ORIGINS` for browser clients) in `.env`; see the variable table
 above. Terminate TLS at a reverse proxy (Caddy/Traefik/nginx) in front of the
 container; the server itself speaks plain HTTP.
 
@@ -235,7 +237,7 @@ pytest            # unit tests (mocked ITFlow) + end-to-end tests
 
 The end-to-end suite spawns the real server (stdio and HTTP) against a bundled
 mock ITFlow instance (`tests/mock_itflow.py`) that implements the documented
-response contract — no live ITFlow needed.
+response contract, so no live ITFlow is needed.
 
 ## Project layout
 
@@ -256,7 +258,7 @@ tests/
 ## Security notes
 
 - The ITFlow API key and the MCP API key are only ever read from the
-  environment — never logged, never a tool parameter.
+  environment. They are never logged and never a tool parameter.
 - `MCP_API_KEY` comparison is constant-time (`hmac.compare_digest`).
 - Use HTTPS for ITFlow and for anything beyond localhost; rotate both keys
   regularly (ITFlow docs recommend monthly for ITFlow keys).
