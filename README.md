@@ -1,7 +1,7 @@
 # ITFlow MCP Server
 
 An [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that lets AI
-agents communicate with an [ITFlow](https://itflow.com) instance — the open source PSA
+agents communicate with an [ITFlow](https://www.itflow.org/) instance — the open source PSA
 for small businesses — through its v1 REST API.
 
 Every documented ITFlow API module becomes a set of tools an agent can call:
@@ -9,6 +9,17 @@ list clients, create tickets, manage assets and contacts, look up credentials,
 read invoices, and more.
 
 Built on the [MCP Python SDK](https://py.sdk.modelcontextprotocol.io) (v2, `MCPServer`).
+
+## Disclaimer
+
+This is an **unofficial, fan-made contribution**. It is **not** associated with, endorsed
+by, or affiliated with the [ITFlow](https://www.itflow.org/) organization in any way.
+
+The author is not a programmer by trade. They built this because they run their own
+ITFlow instance and wanted to connect it to AI to improve their day-to-day workflows.
+
+This project was written **with the assistance of a large language model (LLM)**. Please
+review the code before relying on it, especially for anything security-sensitive.
 
 ## ITFlow API coverage
 
