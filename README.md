@@ -50,11 +50,15 @@ Tools are generated from the module reference in
 | `tickets` | `tickets_read`, `tickets_create`, `tickets_resolve` |
 | `vendors` | `vendors_read` |
 
-Plus two helper tools:
+Plus two helper tools (always available, regardless of permissions):
 
 - `itflow_status`: show the server's configuration and (with `ping: true`) run a
   live test call against ITFlow.
-- `itflow_list_modules`: discover all modules and their tools.
+- `itflow_list_modules`: discover all modules and their tools (only lists the
+  tools currently enabled).
+
+Which of these tools the AI actually gets is controlled by
+`MCP_TOOL_PERMISSIONS` — see [Tool permissions](#tool-permissions).
 
 Notes from the ITFlow docs that the server enforces or documents:
 
@@ -68,6 +72,42 @@ Notes from the ITFlow docs that the server enforces or documents:
 - ITFlow's standard response envelope (`success`, `message`, `count`, `data`) is
   returned verbatim; `success: "False"` is surfaced as a tool error so the agent
   can react to it.
+
+## Tool permissions
+
+The AI only gets tools it is allowed to use. `MCP_TOOL_PERMISSIONS` gates tools
+by what the underlying ITFlow call does to an object:
+
+| Level | What it allows | Example tools |
+|---|---|---|
+| `read` | List/fetch records only. Changes nothing. | `clients_read`, `assets_read`, `invoices_read` |
+| `write` | Create or modify records. Reversible in practice (records can be edited or unarchived), but the AI **will change your data** when it calls them. | `tickets_create`, `contacts_update`, `clients_archive`, `tickets_resolve` |
+| `delete` | **Permanently remove records.** Deletions cannot be undone. | `assets_delete`, `contacts_delete` |
+
+```bash
+MCP_TOOL_PERMISSIONS=read              # AI can only look at data (default)
+MCP_TOOL_PERMISSIONS=read,write        # AI can look at and change data
+MCP_TOOL_PERMISSIONS=read,write,delete # full control — dangerous
+```
+
+How it works:
+
+- Levels are combined with commas; a higher level does **not** imply lower
+  ones — list everything you want.
+- Unset/empty defaults to `read` only, so a fresh install is read-only.
+- Disallowed tools are **not registered**: they never appear in the tool list
+  the AI sees, so the model cannot call what it cannot see. (The ITFlow API
+  key's own scope is an independent second layer of control.)
+- Typos (e.g. `MCP_TOOL_PERMISSIONS=read,rite`) make the server refuse to
+  start rather than silently fall back.
+- `itflow_status` and `itflow_list_modules` always report the active
+  permission set, so you (or the agent) can verify what is enabled.
+
+> **Warning:** enabling `delete` lets the AI permanently delete records in
+> your ITFlow instance (assets and contacts, including related data such as
+> asset network interfaces). Only enable it deliberately, and consider
+> scoping `ITFLOW_API_KEY` to a single client as a safety net. `itflow-mcp-server check`
+> also prints a warning to the console when delete permission is active.
 
 ## Quick start
 
@@ -137,6 +177,7 @@ itflow-mcp-server serve-http
 | `MCP_HTTP_PORT` | no | Bind port for `serve-http` (default `8700`). |
 | `MCP_ALLOWED_HOSTS` | no | Comma-separated `Host` allowlist for the HTTP transport (see note below). |
 | `MCP_ALLOWED_ORIGINS` | no | Comma-separated browser `Origin` allowlist for the HTTP transport. |
+| `MCP_TOOL_PERMISSIONS` | no | Which tools the AI may use, by what they do to an object: `read` (fetch only), `write` (create/modify), `delete` (remove — dangerous). Comma-separated, e.g. `read,write`. Default (unset): `read`. See [Tool permissions](#tool-permissions). |
 | `ITFLOW_VERIFY_SSL` | no | `true` (default) or `false`. Set `false` only for self-signed local test instances. |
 | `ITFLOW_TIMEOUT` | no | HTTP timeout in seconds (default `30`). |
 | `ITFLOW_MAX_RETRIES` | no | Extra retries on transient failures, 429/5xx (default `2`). |
@@ -264,6 +305,9 @@ tests/
   regularly (ITFlow docs recommend monthly for ITFlow keys).
 - Scope ITFlow keys to a single client where possible; the MCP server respects
   whatever scope the key has.
+- `MCP_TOOL_PERMISSIONS` is the first line of defense: the AI only ever sees
+  the tools you allow (read-only by default). It complements, not replaces,
+  ITFlow's own API-key scoping — use both.
 
 ## License
 

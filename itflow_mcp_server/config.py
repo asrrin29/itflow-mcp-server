@@ -30,6 +30,16 @@ ENV_HTTP_HOST = "MCP_HTTP_HOST"
 ENV_HTTP_PORT = "MCP_HTTP_PORT"
 ENV_ALLOWED_HOSTS = "MCP_ALLOWED_HOSTS"
 ENV_ALLOWED_ORIGINS = "MCP_ALLOWED_ORIGINS"
+ENV_TOOL_PERMISSIONS = "MCP_TOOL_PERMISSIONS"
+
+# Tool permission levels, in escalating order. Each level gates a set of
+# tools based on what the underlying ITFlow call does to an object:
+#   read   - list/fetch records only (never changes anything)
+#   write  - creates or modifies records (create/update/archive/unarchive/resolve)
+#   delete - permanently removes records (delete)
+TOOL_PERMISSION_LEVELS: tuple[str, ...] = ("read", "write", "delete")
+# Secure default: the AI may only read.
+DEFAULT_TOOL_PERMISSIONS: tuple[str, ...] = ("read",)
 
 
 class ConfigError(RuntimeError):
@@ -98,6 +108,11 @@ class Config:
     http_port: int = 8700
     allowed_hosts: tuple[str, ...] = ()
     allowed_origins: tuple[str, ...] = ()
+    tool_permissions: tuple[str, ...] = DEFAULT_TOOL_PERMISSIONS
+
+    def allows_action(self, action: str) -> bool:
+        """Whether a tool whose action tier is ``action`` (read/write/delete) is permitted."""
+        return action in self.tool_permissions
 
     @property
     def mcp_api_keys(self) -> tuple[str, ...]:
@@ -138,6 +153,31 @@ def _env_list(name: str) -> tuple[str, ...]:
     return tuple(v.strip() for v in value.split(",") if v.strip())
 
 
+def _env_permissions(name: str) -> tuple[str, ...]:
+    """Parse the tool-permission level list (e.g. ``read,write``).
+
+    Unset means the secure default (read-only). Unknown values are a hard
+    error so a typo can never silently widen (or narrow) access.
+    """
+    value = _env_str(name)
+    if value is None:
+        return DEFAULT_TOOL_PERMISSIONS
+    levels = tuple(v.strip().lower() for v in value.split(",") if v.strip())
+    if not levels:
+        raise ConfigError(
+            f"{name} must be a comma-separated list of: {', '.join(TOOL_PERMISSION_LEVELS)}"
+        )
+    unknown = [v for v in levels if v not in TOOL_PERMISSION_LEVELS]
+    if unknown:
+        raise ConfigError(
+            f"{name} contains unknown permission level(s) {', '.join(unknown)}. "
+            f"Valid levels: {', '.join(TOOL_PERMISSION_LEVELS)} "
+            "(combine with commas, e.g. read,write)."
+        )
+    # De-duplicate and return in canonical escalating order.
+    return tuple(level for level in TOOL_PERMISSION_LEVELS if level in levels)
+
+
 def load_config() -> Config:
     """Build a Config from the environment."""
     _load_dotenv()
@@ -159,4 +199,5 @@ def load_config() -> Config:
         http_port=_env_int(ENV_HTTP_PORT, 8700),
         allowed_hosts=_env_list(ENV_ALLOWED_HOSTS),
         allowed_origins=_env_list(ENV_ALLOWED_ORIGINS),
+        tool_permissions=_env_permissions(ENV_TOOL_PERMISSIONS),
     )

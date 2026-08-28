@@ -66,6 +66,14 @@ async def _cmd_check(config: Config) -> int:
     print(
         f"Decrypt pwd:     {'set' if config.itflow_api_key_password else 'not set (only needed for credentials tools)'}"
     )
+    perms = ",".join(config.tool_permissions) or "<none>"
+    print(f"Tool perms:      {perms} (MCP_TOOL_PERMISSIONS)")
+    if "delete" in config.tool_permissions:
+        print(
+            "WARNING: delete permission is enabled - the AI can PERMANENTLY REMOVE ITFlow records.\n"
+            "         Remove 'delete' from MCP_TOOL_PERMISSIONS if you did not mean to allow this.",
+            file=sys.stderr,
+        )
     print(f"Verify SSL:      {config.verify_ssl}")
     print("Pinging ITFlow (clients/read, limit=1)...")
     async with ITFlowClient(config) as client:

@@ -10,6 +10,20 @@ Transports
   No API key is required for the MCP layer itself.
 - ``streamable-http``: for remote/network access. Requires ``MCP_API_KEY``;
   clients must send ``Authorization: Bearer <MCP_API_KEY>``.
+
+Tool permissions
+----------------
+``MCP_TOOL_PERMISSIONS`` gates which tools are exposed to the AI, tiered by
+what the underlying ITFlow call does to an object:
+
+- ``read``   - list/fetch records only (never changes anything)
+- ``write``  - creates or modifies records (create/update/archive/unarchive/resolve)
+- ``delete`` - permanently removes records (delete)
+
+Unset defaults to ``read`` only. A tool is registered only when its tier is
+allowed, so disallowed tools are invisible to the AI (they never appear in
+``tools/list``). ``itflow_status`` and ``itflow_list_modules`` are always
+available.
 """
 
 from __future__ import annotations
@@ -30,6 +44,27 @@ from .specs import MODULES, FunctionSpec, ModuleSpec, all_functions
 logger = logging.getLogger("itflow_mcp_server")
 
 TYPE_MAP: dict[str, str] = {"int": "int", "str": "str", "float": "float", "bool": "bool"}
+
+# Permission tier for each ITFlow function, by what it does to an object.
+#   read   - fetches records, changes nothing
+#   write  - creates or modifies records (archive/unarchive/resolve change
+#            state but are reversible, so they are not destructive)
+#   delete - permanently removes records
+ACTION_TIER: dict[str, str] = {
+    "read": "read",
+    "create": "write",
+    "update": "write",
+    "archive": "write",
+    "unarchive": "write",
+    "resolve": "write",
+    "delete": "delete",
+}
+
+TIER_DESCRIPTIONS: dict[str, str] = {
+    "read": "read tools (list/fetch records only)",
+    "write": "write tools (create/update/archive/unarchive/resolve)",
+    "delete": "delete tools (permanently remove records)",
+}
 
 
 class ServerState:
@@ -131,6 +166,12 @@ def _tool_annotations(module: ModuleSpec, fn: FunctionSpec) -> ToolAnnotations:
     return ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
 
 
+def _permission_summary(config: Config) -> str:
+    if not config.tool_permissions:
+        return "NO ITFlow tools are enabled (set MCP_TOOL_PERMISSIONS to read, write, or delete)"
+    return "enabled: " + ", ".join(TIER_DESCRIPTIONS[t] for t in config.tool_permissions)
+
+
 def build_server(config: Config) -> tuple[MCPServer, ServerState]:
     """Create the MCPServer with all ITFlow tools registered."""
     state = ServerState(config)
@@ -153,13 +194,25 @@ def build_server(config: Config) -> tuple[MCPServer, ServerState]:
             "(https://docs.itflow.org/api). Reads return up to 50 records by default; "
             "use limit/offset to paginate. When the API key has all-client scope, "
             "pass client_id on create/update/delete calls. Use itflow_status to "
-            "verify connectivity and itflow_list_modules to discover what is available."
+            "verify connectivity and itflow_list_modules to discover what is available. "
+            f"Tool permissions for this server ({_permission_summary(config)})."
         ),
         version=SERVER_VERSION,
         lifespan=lifespan,
     )
 
+    registered: list[str] = []
     for module, fn in all_functions():
+        tier = ACTION_TIER[fn.name]
+        if not config.allows_action(tier):
+            logger.info(
+                "Skipping tool %s_%s: requires '%s' permission (MCP_TOOL_PERMISSIONS=%s)",
+                module.name,
+                fn.name,
+                tier,
+                ",".join(config.tool_permissions) or "<none>",
+            )
+            continue
         impl_name = f"_impl_{module.name}_{fn.name}"
         impl = _make_impl(state, module, fn)
         source = _build_handler_source(fn.fields, impl_name)
@@ -174,6 +227,12 @@ def build_server(config: Config) -> tuple[MCPServer, ServerState]:
             description=_tool_description(module, fn),
             annotations=_tool_annotations(module, fn),
         )
+        registered.append(name)
+    logger.info(
+        "Registered %d ITFlow tools (MCP_TOOL_PERMISSIONS=%s)",
+        len(registered),
+        ",".join(config.tool_permissions) or "<none>",
+    )
 
     @mcp.tool(
         name="itflow_status",
@@ -189,6 +248,7 @@ def build_server(config: Config) -> tuple[MCPServer, ServerState]:
             "itflow_base_url": cfg.itflow_base_url or None,
             "itflow_api_key_configured": bool(cfg.itflow_api_key),
             "itflow_api_key_password_configured": bool(cfg.itflow_api_key_password),
+            "tool_permissions": list(cfg.tool_permissions),
             "verify_ssl": cfg.verify_ssl,
             "timeout_seconds": cfg.timeout_seconds,
             "ready": bool(cfg.itflow_base_url and cfg.itflow_api_key),
@@ -219,7 +279,9 @@ def build_server(config: Config) -> tuple[MCPServer, ServerState]:
         ),
     )
     async def itflow_list_modules() -> dict[str, Any]:
+        cfg = state.config
         return {
+            "tool_permissions": list(cfg.tool_permissions),
             "modules": [
                 {
                     "name": m.name,
@@ -232,6 +294,7 @@ def build_server(config: Config) -> tuple[MCPServer, ServerState]:
                             **({"notes": f.notes} if f.notes else {}),
                         }
                         for f in m.functions
+                        if cfg.allows_action(ACTION_TIER[f.name])
                     ],
                 }
                 for m in MODULES

@@ -24,6 +24,11 @@ services:
       # MCP_ALLOWED_ORIGINS: "https://itflow-mcp.example.com"
       MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:-}"
       MCP_ALLOWED_ORIGINS: "${MCP_ALLOWED_ORIGINS:-}"
+      # Tool permissions: which tools the AI may use, by what they do to an
+      # ITFlow object (see .env.example for the full explanation + delete warning):
+      #   read   = list/fetch only   write = create/modify   delete = remove (dangerous)
+      # Default (unset) is read-only. Use e.g. "read,write" to let the AI edit data.
+      MCP_TOOL_PERMISSIONS: "${MCP_TOOL_PERMISSIONS:-read}"
       MCP_LOG_LEVEL: "${MCP_LOG_LEVEL:-INFO}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8700/health', timeout=4)"]
